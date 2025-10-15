@@ -26,7 +26,6 @@ from src.controller.f5_tts.model.modules import (
 )
 
 
-# Text embedding
 
 
 class TextEmbedding(nn.Module):
@@ -55,21 +54,16 @@ class TextEmbedding(nn.Module):
 
         text = self.text_embed(text)  # b n -> b n d
 
-        # possible extra modeling
         if self.extra_modeling:
-            # sinus pos emb
             batch_start = torch.zeros((batch,), dtype=torch.long)
             pos_idx = get_pos_embed_indices(batch_start, seq_len, max_pos=self.precompute_max_pos)
             text_pos_embed = self.freqs_cis[pos_idx]
             text = text + text_pos_embed
-
-            # convnextv2 blocks
             text = self.text_blocks(text)
 
         return text
 
 
-# noised input audio and context mixing embedding
 
 
 class InputEmbedding(nn.Module):
@@ -87,7 +81,6 @@ class InputEmbedding(nn.Module):
         return x
 
 
-# Transformer backbone using DiT blocks
 
 
 class DiT(nn.Module):
@@ -141,7 +134,6 @@ class DiT(nn.Module):
         if time.ndim == 0:
             time = time.repeat(batch)
 
-        # t: conditioning time, c: context (text + masked cond audio), x: noised input audio
         t = self.time_embed(time)
         text_embed = self.text_embed(text, seq_len, drop_text=drop_text)
         x = self.input_embed(x, cond, text_embed, drop_audio_cond=drop_audio_cond)

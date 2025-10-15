@@ -1,0 +1,25 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual envs
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Local assets and large artifacts
+assets/
+
+# Model checkpoints (downloaded at runtime)
+src/controller/f5_tts/checkpoints/**
+
+# Misc
+*.log
+*.tmp

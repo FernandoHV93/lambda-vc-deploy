@@ -1,4 +1,3 @@
-#version 2.2
 from datetime import datetime
 import logging
 import os
@@ -128,3 +127,16 @@ def download_files_list(prefix: str, local_folder_name=None) -> bool:
 def delete_file(key, bucketName=Configurations.LAMBDA_VC_BUCKET_NAME):
     s3 = boto3.resource('s3')
     s3.Object(bucketName, key).delete()
+
+
+def generate_presigned_url(object_key: str, bucket_name: str = Configurations.LAMBDA_VC_BUCKET_NAME, expires_in: int = 3600) -> str:
+    s3_client = boto3.client('s3')
+    try:
+        return s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket_name, 'Key': object_key},
+            ExpiresIn=expires_in
+        )
+    except ClientError as e:
+        logging.error(e)
+        return ""

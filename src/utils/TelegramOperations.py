@@ -1,9 +1,9 @@
 import requests
+from os import getenv
 from src.config.config import Configurations
 import json
 from src.utils.LogsPrint import printLog
 
-# https://telegram-bot-sdk.readme.io/reference/sendmessage
 
 
 def sendTelegramMessage(*parameters):
@@ -14,7 +14,7 @@ def sendTelegramMessage(*parameters):
         if not parameters:
             return
 
-        text = "TelegramBot " + Configurations.BASE_URL + "\n"
+        text = "TelegramBot " + (Configurations.BASE_URL or "") + "\n"
 
         for p in parameters:
             if not isinstance(p, str):
@@ -55,7 +55,7 @@ def sendTelegramMessageText(chat_id: int, text: str, reply_to_message_id=None, d
         }
 
     response = requests.post("https://api.telegram.org/bot{}/sendMessage"
-                             .format("1919318351:AAGSLE_ootbLpaOPgwU0Enuyl3d3wpzc9kI"), payload)
+                             .format(getenv("TELEGRAM_BOT_TOKEN", "")), payload)
 
     message_id = None
     if response.ok:
@@ -79,7 +79,7 @@ def sendTelegramMessageFile(chat_id: int, text: str, fileContent: str, reply_to_
         "chat_id": chat_id
     }
     response = requests.post("https://api.telegram.org/bot{}/sendDocument"
-                             .format("1919318351:AAGSLE_ootbLpaOPgwU0Enuyl3d3wpzc9kI"),
+                             .format(getenv("TELEGRAM_BOT_TOKEN", "")),
                              params=payload, files={"document": ("context.txt", fileContent.encode())})
     message_id = None
     if response.ok:
@@ -93,7 +93,6 @@ def sendTelegramMessageFile(chat_id: int, text: str, fileContent: str, reply_to_
 
 def sendStructuredTelegramMessage(chat_id: int, title: str, fields: dict, footer: str = None, reply_to_message_id=None, default=None):
     def escape_markdown(text):
-        # Escapa caracteres especiales de Markdown v2 de Telegram
         for ch in ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']:
             text = text.replace(ch, f'\\{ch}')
         return text
@@ -120,7 +119,7 @@ def sendStructuredTelegramMessage(chat_id: int, title: str, fields: dict, footer
     }
 
     response = requests.post(
-        "https://api.telegram.org/bot{}/sendMessage".format("1919318351:AAGSLE_ootbLpaOPgwU0Enuyl3d3wpzc9kI"),
+        "https://api.telegram.org/bot{}/sendMessage".format(getenv("TELEGRAM_BOT_TOKEN", "")),
         data=payload
     )
 

@@ -29,19 +29,16 @@ class F5TTS:
         local_path=None,
         device=None,
     ):
-        # Initialize parameters
         self.final_wave = None
         self.target_sample_rate = target_sample_rate
         self.hop_length = hop_length
         self.seed = -1
         self.mel_spec_type = vocoder_name
 
-        # Set device
         self.device = device or (
             "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
         )
 
-        # Load models
         self.load_vocoder_model(vocoder_name, local_path)
         self.load_ema_model(model_type, ckpt_file, vocoder_name, vocab_file, ode_method, use_ema)
         self.gpu_monitor = None
@@ -52,7 +49,6 @@ class F5TTS:
     def load_ema_model(self, model_type, ckpt_file, mel_spec_type, vocab_file, ode_method, use_ema):
         if model_type == "F5-TTS":
             if not ckpt_file:
-                # Expect caller to provide ckpt_file; fallback not provided here
                 raise ValueError("ckpt_file must be provided for F5-TTS")
             model_cfg = dict(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4)
             model_cls = DiT
@@ -69,8 +65,6 @@ class F5TTS:
         if remove_silence:
             remove_silence_for_generated_wav(file_wave)
 
-    # def export_spectrogram(self, spect, file_spect):
-    #     save_spectrogram(spect, file_spect)
 
     def infer(
         self,
@@ -128,7 +122,5 @@ class F5TTS:
         if file_wave is not None:
             self.export_wav(wav, file_wave, remove_silence)
 
-        # if file_spect is not None:
-        #     self.export_spectrogram(spect, file_spect)
 
         return wav, sr, spect

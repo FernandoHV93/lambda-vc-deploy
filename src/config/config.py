@@ -33,14 +33,16 @@ class Configurations:
     ENVIROMENT = getenv(PREFIX + "ENVIROMENT", 'prod')
     ENVIROMENT_PROD = 'prod'
     ENVIROMENT_STAGING = 'staging'
+    BASE_URL = getenv('BASE_URL', '')
     LAMBDA_VC_LANGUAGE = getenv("LAMBDA_VC_LANGUAGE", 'es')
     LAMBDA_VC_AUDIOPATH = getenv(PREFIX+"AUDIOPATH", 'assets')
-    MSNLP_AI_F5TTS_AUDIO_CHECKPOINT_ES = getenv(PREFIX + 'AI_F5TTS_AUDIO_CHECKPOINT', 'src/controller/f5_tts/checkpoints/es/model_1200000.safetensors')
-    MSNLP_AI_F5TTS_AUDIO_CHECKPOINT_EN = getenv(PREFIX + 'AI_F5TTS_AUDIO_CHECKPOINT', 'src/controller/f5_tts/checkpoints/en/model_1200000.pt')
+    MSNLP_AI_F5TTS_AUDIO_CHECKPOINT_ES = getenv(PREFIX + 'AI_F5TTS_AUDIO_CHECKPOINT_ES', 'src/controller/f5_tts/checkpoints/es/model_1200000.safetensors')
+    MSNLP_AI_F5TTS_AUDIO_CHECKPOINT_EN = getenv(PREFIX + 'AI_F5TTS_AUDIO_CHECKPOINT_EN', 'src/controller/f5_tts/checkpoints/en/model_1200000.pt')
     MSNLP_AI_F5TTS_AUDIO_VOCAB_ES = getenv(PREFIX+'AI_F5TTS_AUDIO_VOCAB_ES', 'src/controller/f5_tts/vocab/vocab_es.txt')
     LAMBDA_VC_BUCKET_NAME = getenv(PREFIX+'BUCKET_USER_AUDIO_FILES', 'fyself_audio_users')
     FYSELF_S3_MODELS = getenv(PREFIX + "FYSELF_S3_MODELS", "fyself-ia-models")
     MSNLP_BUCKET_NAME = getenv("MSNLP_BUCKET_NAME", 'nlp-glove-data')
+    LAMBDA_VC_OUTPUT_PREFIX = getenv(PREFIX + 'OUTPUT_PREFIX', 'voice-clones')
 
     @staticmethod
     def isProd():

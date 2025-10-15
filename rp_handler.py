@@ -81,51 +81,64 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
     out = {}
     out["job_id"] = input_data.get("job_id")
     guide_text = input_data.get("guide_text")
-    if not isinstance(guide_text, str):
-        return {
-            "job_id": out["job_id"],
-            "status": "Error",
-            "message": "Guide text is necessary!"
-        }
     language = input_data.get("language")
-    if not isinstance(language, str):
-        return {
-        "job_id": out["job_id"],
-        "status": "Error",
-        "message": "Language text is necessary!"
-    }
     text_to_speech = input_data.get("text_to_speech")
-    if not isinstance(text_to_speech, str):
-        return {
-        "job_id": out["job_id"],
-        "status": "Error",
-        "message": "Text to speech is necessary!"
-    }
-
-    reference_audio =input_data.get("reference_audio")
-
+    reference_audio = input_data.get("reference_audio")
+    return_strategy = input_data.get("return_strategy", "base64")
 
     if not isinstance(guide_text, str) or not guide_text:
-        return {"error": "guide_text is required"}
+        return {
+            "job_id": out.get("job_id"),
+            "status": "Error",
+            "message": "guide_text is required"
+        }
+    if not isinstance(language, str) or not language:
+        return {
+            "job_id": out.get("job_id"),
+            "status": "Error",
+            "message": "language is required"
+        }
+    if not isinstance(text_to_speech, str) or not text_to_speech:
+        return {
+            "job_id": out.get("job_id"),
+            "status": "Error",
+            "message": "text_to_speech is required"
+        }
+    if not isinstance(reference_audio, str) or not reference_audio:
+        return {
+            "job_id": out.get("job_id"),
+            "status": "Error",
+            "message": "reference_audio is required (base64 or URL)"
+        }
 
-
-
-    out = process_clone_job_sync(
+    result = process_clone_job_sync(
         guide_text=guide_text,
         language=language,
-        referece_audio=reference_audio,
-        text_to_speech = text_to_speech
+        reference_audio=reference_audio,
+        text_to_speech=text_to_speech,
+        return_strategy=return_strategy,
     )
 
-    # Return a minimal confirmation to Runpod; heavy payload is sent to webhook.
-    return {
-        "job_id": out["job_id"],
-        "status": "submitted",
+    out_payload = {
+        "job_id": out.get("job_id"),
+        "status": "completed",
+        "result_format": result.get('format', 'wav'),
+        "sample_rate": result.get('sample_rate'),
+        "seed": result.get('seed'),
     }
+    if return_strategy == 's3':
+        out_payload.update({
+            "s3_url_presigned": result.get('s3_url_presigned'),
+            "s3_key": result.get('s3_key'),
+        })
+    else:
+        out_payload["result_audio_base64"] = result.get('audio_base64')
+    return out_payload
 
 
 
-is_model_checkpoint_downloaded(['F5TTS_ES','F5TTS_EN'])
-runpod.serverless.start({"handler": handler})
+if __name__ == "__main__":
+    is_model_checkpoint_downloaded(['F5TTS_ES','F5TTS_EN'])
+    runpod.serverless.start({"handler": handler})
 
 

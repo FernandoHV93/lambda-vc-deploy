@@ -1,0 +1,8 @@
+{
+  "input": {
+    "guide_text": "Hola, este es un texto de guía para la clonación de voz.",
+    "language": "es",
+    "text_to_speech": "Hola, esta es una prueba de síntesis de voz clonada.",
+    "referece_audio": "users/1234/reference/ref.wav"
+  }
+}

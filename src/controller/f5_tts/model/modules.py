@@ -40,7 +40,7 @@ def get_bigvgan_mel_spectrogram(
 
     if key not in mel_basis_cache:
         mel = librosa_mel_fn(sr=target_sample_rate, n_fft=n_fft, n_mels=n_mel_channels, fmin=fmin, fmax=fmax)
-        mel_basis_cache[key] = torch.from_numpy(mel).float().to(device)  # TODO: why they need .float()?
+        mel_basis_cache[key] = torch.from_numpy(mel).float().to(device)
         hann_window_cache[key] = torch.hann_window(win_length).to(device)
 
     mel_basis = mel_basis_cache[key]
@@ -191,10 +191,6 @@ class ConvPositionEmbedding(nn.Module):
 
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, theta_rescale_factor=1.0):
-    # proposed by reddit user bloc97, to rescale rotary embeddings to longer sequence length without fine-tuning
-    # has some connection to NTK literature
-    # https://www.reddit.com/r/LocalLLaMA/comments/14lz7j5/ntkaware_scaled_rope_allows_llama_models_to_have/
-    # https://github.com/lucidrains/rotary-embedding-torch/blob/main/rotary_embedding_torch/rotary_embedding_torch.py
     theta *= theta_rescale_factor ** (dim / (dim - 2))
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
     t = torch.arange(end, device=freqs.device)  # type: ignore
@@ -205,13 +201,11 @@ def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, theta_resca
 
 
 def get_pos_embed_indices(start, length, max_pos, scale=1.0):
-    # length = length if isinstance(length, int) else length.max()
-    scale = scale * torch.ones_like(start, dtype=torch.float32)  # in case scale is a scalar
+    scale = scale * torch.ones_like(start, dtype=torch.float32)
     pos = (
         start.unsqueeze(1)
         + (torch.arange(length, device=start.device, dtype=torch.float32).unsqueeze(0) * scale.unsqueeze(1)).long()
     )
-    # avoid extra long error.
     pos = torch.where(pos < max_pos, pos, max_pos - 1)
     return pos
 
@@ -246,18 +240,18 @@ class ConvNeXtV2Block(nn.Module):
         padding = (dilation * (7 - 1)) // 2
         self.dwconv = nn.Conv1d(
             dim, dim, kernel_size=7, padding=padding, groups=dim, dilation=dilation
-        )  # depthwise conv
+        )
         self.norm = nn.LayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(dim, intermediate_dim)  # pointwise/1x1 convs, implemented with linear layers
+        self.pwconv1 = nn.Linear(dim, intermediate_dim)
         self.act = nn.GELU()
         self.grn = GRN(intermediate_dim)
         self.pwconv2 = nn.Linear(intermediate_dim, dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         residual = x
-        x = x.transpose(1, 2)  # b n d -> b d n
+        x = x.transpose(1, 2)
         x = self.dwconv(x)
-        x = x.transpose(1, 2)  # b d n -> b n d
+        x = x.transpose(1, 2)
         x = self.norm(x)
         x = self.pwconv1(x)
         x = self.act(x)
@@ -337,7 +331,7 @@ class Attention(nn.Module):
         heads: int = 8,
         dim_head: int = 64,
         dropout: float = 0.0,
-        context_dim: Optional[int] = None,  # if not None -> joint attention
+        context_dim: Optional[int] = None,
         context_pre_only=None,
     ):
         super().__init__()
@@ -374,11 +368,11 @@ class Attention(nn.Module):
 
     def forward(
         self,
-        x: float["b n d"],  # noised input x  # noqa: F722
-        c: float["b n d"] = None,  # context c  # noqa: F722
+        x: float["b n d"],  # noqa: F722
+        c: float["b n d"] = None,  # noqa: F722
         mask: bool["b n"] | None = None,  # noqa: F722
-        rope=None,  # rotary position embedding for x
-        c_rope=None,  # rotary position embedding for c
+        rope=None,
+        c_rope=None,
     ) -> torch.Tensor:
         if c is not None:
             return self.processor(self, x, c=c, mask=mask, rope=rope, c_rope=c_rope)
@@ -396,18 +390,16 @@ class AttnProcessor:
     def __call__(
         self,
         attn: Attention,
-        x: float["b n d"],  # noised input x  # noqa: F722
+        x: float["b n d"],  # noqa: F722
         mask: bool["b n"] | None = None,  # noqa: F722
-        rope=None,  # rotary position embedding
+        rope=None,
     ) -> torch.FloatTensor:
         batch_size = x.shape[0]
 
-        # `sample` projections.
         query = attn.to_q(x)
         key = attn.to_k(x)
         value = attn.to_v(x)
 
-        # apply rotary position embedding
         if rope is not None:
             freqs, xpos_scale = rope
             q_xpos_scale, k_xpos_scale = (xpos_scale, xpos_scale**-1.0) if xpos_scale is not None else (1.0, 1.0)
@@ -415,17 +407,15 @@ class AttnProcessor:
             query = apply_rotary_pos_emb(query, freqs, q_xpos_scale)
             key = apply_rotary_pos_emb(key, freqs, k_xpos_scale)
 
-        # attention
         inner_dim = key.shape[-1]
         head_dim = inner_dim // attn.heads
         query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
         key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
         value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
 
-        # mask. e.g. inference got a batch with different target durations, mask out the padding
         if mask is not None:
             attn_mask = mask
-            attn_mask = attn_mask.unsqueeze(1).unsqueeze(1)  # 'b n -> b 1 1 n'
+            attn_mask = attn_mask.unsqueeze(1).unsqueeze(1)
             attn_mask = attn_mask.expand(batch_size, attn.heads, query.shape[-2], key.shape[-2])
         else:
             attn_mask = None
@@ -434,9 +424,7 @@ class AttnProcessor:
         x = x.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
         x = x.to(query.dtype)
 
-        # linear proj
         x = attn.to_out[0](x)
-        # dropout
         x = attn.to_out[1](x)
 
         if mask is not None:
@@ -457,27 +445,24 @@ class JointAttnProcessor:
     def __call__(
         self,
         attn: Attention,
-        x: float["b n d"],  # noised input x  # noqa: F722
-        c: float["b nt d"] = None,  # context c, here text # noqa: F722
+        x: float["b n d"],  # noqa: F722
+        c: float["b nt d"] = None,  # noqa: F722
         mask: bool["b n"] | None = None,  # noqa: F722
-        rope=None,  # rotary position embedding for x
-        c_rope=None,  # rotary position embedding for c
+        rope=None,
+        c_rope=None,
     ) -> torch.FloatTensor:
         residual = x
 
         batch_size = c.shape[0]
 
-        # `sample` projections.
         query = attn.to_q(x)
         key = attn.to_k(x)
         value = attn.to_v(x)
 
-        # `context` projections.
         c_query = attn.to_q_c(c)
         c_key = attn.to_k_c(c)
         c_value = attn.to_v_c(c)
 
-        # apply rope for context and noised input independently
         if rope is not None:
             freqs, xpos_scale = rope
             q_xpos_scale, k_xpos_scale = (xpos_scale, xpos_scale**-1.0) if xpos_scale is not None else (1.0, 1.0)
@@ -489,7 +474,6 @@ class JointAttnProcessor:
             c_query = apply_rotary_pos_emb(c_query, freqs, q_xpos_scale)
             c_key = apply_rotary_pos_emb(c_key, freqs, k_xpos_scale)
 
-        # attention
         query = torch.cat([query, c_query], dim=1)
         key = torch.cat([key, c_key], dim=1)
         value = torch.cat([value, c_value], dim=1)
@@ -500,10 +484,9 @@ class JointAttnProcessor:
         key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
         value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
 
-        # mask. e.g. inference got a batch with different target durations, mask out the padding
         if mask is not None:
-            attn_mask = F.pad(mask, (0, c.shape[1]), value=True)  # no mask for c (text)
-            attn_mask = attn_mask.unsqueeze(1).unsqueeze(1)  # 'b n -> b 1 1 n'
+            attn_mask = F.pad(mask, (0, c.shape[1]), value=True)
+            attn_mask = attn_mask.unsqueeze(1).unsqueeze(1)
             attn_mask = attn_mask.expand(batch_size, attn.heads, query.shape[-2], key.shape[-2])
         else:
             attn_mask = None
@@ -512,15 +495,12 @@ class JointAttnProcessor:
         x = x.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
         x = x.to(query.dtype)
 
-        # Split the attention outputs.
         x, c = (
             x[:, : residual.shape[1]],
             x[:, residual.shape[1] :],
         )
 
-        # linear proj
         x = attn.to_out[0](x)
-        # dropout
         x = attn.to_out[1](x)
         if not attn.context_pre_only:
             c = attn.to_out_c(c)
@@ -528,7 +508,6 @@ class JointAttnProcessor:
         if mask is not None:
             mask = mask.unsqueeze(-1)
             x = x.masked_fill(~mask, 0.0)
-            # c = c.masked_fill(~mask, 0.)  # no mask for c (text)
 
         return x, c
 
@@ -552,14 +531,11 @@ class DiTBlock(nn.Module):
         self.ff_norm = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
         self.ff = FeedForward(dim=dim, mult=ff_mult, dropout=dropout, approximate="tanh")
 
-    def forward(self, x, t, mask=None, rope=None):  # x: noised input, t: time embedding
-        # pre-norm & modulation for attention input
+    def forward(self, x, t, mask=None, rope=None):
         norm, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.attn_norm(x, emb=t)
 
-        # attention
         attn_output = self.attn(x=norm, mask=mask, rope=rope)
 
-        # process attention output for input x
         x = x + gate_msa.unsqueeze(1) * attn_output
 
         norm = self.ff_norm(x) * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
@@ -608,28 +584,24 @@ class MMDiTBlock(nn.Module):
         self.ff_norm_x = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
         self.ff_x = FeedForward(dim=dim, mult=ff_mult, dropout=dropout, approximate="tanh")
 
-    def forward(self, x, c, t, mask=None, rope=None, c_rope=None):  # x: noised input, c: context, t: time embedding
-        # pre-norm & modulation for attention input
+    def forward(self, x, c, t, mask=None, rope=None, c_rope=None):
         if self.context_pre_only:
             norm_c = self.attn_norm_c(c, t)
         else:
             norm_c, c_gate_msa, c_shift_mlp, c_scale_mlp, c_gate_mlp = self.attn_norm_c(c, emb=t)
         norm_x, x_gate_msa, x_shift_mlp, x_scale_mlp, x_gate_mlp = self.attn_norm_x(x, emb=t)
 
-        # attention
         x_attn_output, c_attn_output = self.attn(x=norm_x, c=norm_c, mask=mask, rope=rope, c_rope=c_rope)
 
-        # process attention output for context c
         if self.context_pre_only:
             c = None
-        else:  # if not last layer
+        else:
             c = c + c_gate_msa.unsqueeze(1) * c_attn_output
 
             norm_c = self.ff_norm_c(c) * (1 + c_scale_mlp[:, None]) + c_shift_mlp[:, None]
             c_ff_output = self.ff_c(norm_c)
             c = c + c_gate_mlp.unsqueeze(1) * c_ff_output
 
-        # process attention output for input x
         x = x + x_gate_msa.unsqueeze(1) * x_attn_output
 
         norm_x = self.ff_norm_x(x) * (1 + x_scale_mlp[:, None]) + x_shift_mlp[:, None]
@@ -651,5 +623,5 @@ class TimestepEmbedding(nn.Module):
     def forward(self, timestep: float["b"]):  # noqa: F821
         time_hidden = self.time_embed(timestep)
         time_hidden = time_hidden.to(timestep.dtype)
-        time = self.time_mlp(time_hidden)  # b d
+        time = self.time_mlp(time_hidden)
         return time

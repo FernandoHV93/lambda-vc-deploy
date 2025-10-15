@@ -29,7 +29,6 @@ from src.controller.f5_tts.model.modules import (
 )
 
 
-# Text embedding
 
 
 class TextEmbedding(nn.Module):
@@ -58,21 +57,16 @@ class TextEmbedding(nn.Module):
 
         text = self.text_embed(text)  # b n -> b n d
 
-        # possible extra modeling
         if self.extra_modeling:
-            # sinus pos emb
             batch_start = torch.zeros((batch,), dtype=torch.long)
             pos_idx = get_pos_embed_indices(batch_start, seq_len, max_pos=self.precompute_max_pos)
             text_pos_embed = self.freqs_cis[pos_idx]
             text = text + text_pos_embed
-
-            # convnextv2 blocks
             text = self.text_blocks(text)
 
         return text
 
 
-# noised input audio and context mixing embedding
 
 
 class InputEmbedding(nn.Module):
@@ -90,7 +84,6 @@ class InputEmbedding(nn.Module):
         return x
 
 
-# Flat UNet Transformer backbone
 
 
 class UNetT(nn.Module):
@@ -120,7 +113,6 @@ class UNetT(nn.Module):
 
         self.rotary_embed = RotaryEmbedding(dim_head)
 
-        # transformer layers & skip connections
 
         self.dim = dim
         self.skip_connect_type = skip_connect_type
@@ -175,25 +167,21 @@ class UNetT(nn.Module):
         if time.ndim == 0:
             time = time.repeat(batch)
 
-        # t: conditioning time, c: context (text + masked cond audio), x: noised input audio
         t = self.time_embed(time)
         text_embed = self.text_embed(text, seq_len, drop_text=drop_text)
         x = self.input_embed(x, cond, text_embed, drop_audio_cond=drop_audio_cond)
 
-        # postfix time t to input x, [b n d] -> [b n+1 d]
-        x = torch.cat([t.unsqueeze(1), x], dim=1)  # pack t to x
+        x = torch.cat([t.unsqueeze(1), x], dim=1)
         if mask is not None:
             mask = F.pad(mask, (1, 0), value=1)
 
         rope = self.rotary_embed.forward_from_seq_len(seq_len + 1)
 
-        # flat unet transformer
         skip_connect_type = self.skip_connect_type
         skips = []
         for idx, (maybe_skip_proj, attn_norm, attn, ff_norm, ff) in enumerate(self.layers):
             layer = idx + 1
 
-            # skip connection logic
             is_first_half = layer <= (self.depth // 2)
             is_later_half = not is_first_half
 
@@ -208,7 +196,6 @@ class UNetT(nn.Module):
                 elif skip_connect_type == "add":
                     x = x + skip
 
-            # attention and feedforward blocks
             x = attn(attn_norm(x), rope=rope, mask=mask) + x
             x = ff(ff_norm(x)) + x
         assert len(skips) == 0

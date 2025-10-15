@@ -1,5 +1,3 @@
-# A unified script for inference process
-# Make adjustments inside functions, and consider both gradio and cli scripts if need to change func output format
 import os
 import sys
 
@@ -30,7 +28,6 @@ _ref_audio_cache = {}
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
-# -----------------------------------------
 
 target_sample_rate = 24000
 n_mel_channels = 100
@@ -41,17 +38,15 @@ mel_spec_type = "vocos"
 target_rms = 0.1
 cross_fade_duration = 0.15
 ode_method = "euler"
-nfe_step = 32  # 16, 32
+nfe_step = 32
 cfg_strength = 2.0
 sway_sampling_coef = -1.0
 speed = 1.0
 fix_duration = None
 margin_error_rate = 0.1
 
-# -----------------------------------------
 
 
-# chunk text into smaller pieces
 def split_into_sentences(text, max_words=10):
     words = text.split()
     sentences = []
@@ -64,7 +59,6 @@ def split_into_sentences(text, max_words=10):
     return sentences
 
 
-# load vocoder
 def load_vocoder(vocoder_name="vocos", is_local=False, local_path="", device=device):
     if vocoder_name == "vocos":
         if is_local:
@@ -92,8 +86,6 @@ def load_vocoder(vocoder_name="vocos", is_local=False, local_path="", device=dev
     return vocoder
 
 
-# load asr pipeline
-
 asr_pipe = None
 
 
@@ -103,15 +95,22 @@ def initialize_asr_pipeline(device=device, dtype=None):
             torch.float16 if device == "cuda" and torch.cuda.get_device_properties(device).major >= 6 else torch.float32
         )
     global asr_pipe
+    pipe_kwargs = {"torch_dtype": dtype}
+    try:
+        if device == "cuda":
+            pipe_kwargs["device"] = 0
+        elif device == "mps":
+            pipe_kwargs["device_map"] = "auto"
+        else:
+            pipe_kwargs["device"] = -1
+    except Exception:
+        pipe_kwargs["device"] = -1
+
     asr_pipe = pipeline(
         "automatic-speech-recognition",
         model="openai/whisper-large-v3-turbo",
-        torch_dtype=dtype,
-        device=device,
+        **pipe_kwargs,
     )
-
-
-# load model checkpoint for inference
 
 
 def load_checkpoint(model, ckpt_path,device, dtype=None, use_ema=True):
@@ -137,7 +136,6 @@ def load_checkpoint(model, ckpt_path,device, dtype=None, use_ema=True):
             if k not in ["initted", "step"]
         }
 
-        # patch for backward compatibility, 305e3ea
         for key in ["mel_spec.mel_stft.mel_scale.fb", "mel_spec.mel_stft.spectrogram.window"]:
             if key in checkpoint["model_state_dict"]:
                 del checkpoint["model_state_dict"][key]
@@ -149,9 +147,6 @@ def load_checkpoint(model, ckpt_path,device, dtype=None, use_ema=True):
         model.load_state_dict(checkpoint["model_state_dict"])
 
     return model.to(device)
-
-
-# load model for inference
 
 
 def load_model(
@@ -196,11 +191,9 @@ def load_model(
 
 
 def remove_silence_edges(audio, silence_threshold=-42):
-    # Remove silence from the start
     non_silent_start_idx = silence.detect_leading_silence(audio, silence_threshold=silence_threshold)
     audio = audio[non_silent_start_idx:]
 
-    # Remove silence from the end
     non_silent_end_duration = audio.duration_seconds
     for ms in reversed(audio):
         if ms.dBFS > silence_threshold:
@@ -211,58 +204,54 @@ def remove_silence_edges(audio, silence_threshold=-42):
     return trimmed_audio
 
 
-# preprocess reference audio and text
-
-
 def preprocess_ref_audio_text(ref_audio_orig, ref_text, clip_short=True, show_info=print, device=device):
     show_info("Converting audio...")
-    _, ext = os.path.splitext(ref_audio_orig)
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as f:
-        aseg = AudioSegment.from_file(ref_audio_orig)
+    try:
+        _, ext = os.path.splitext(ref_audio_orig)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as f:
+            aseg = AudioSegment.from_file(ref_audio_orig)
 
-        if clip_short:
-            # 1. try to find long silence for clipping
-            non_silent_segs = silence.split_on_silence(
-                aseg, min_silence_len=1000, silence_thresh=-50, keep_silence=1000, seek_step=10
-            )
-            non_silent_wave = AudioSegment.silent(duration=0)
-            for non_silent_seg in non_silent_segs:
-                if len(non_silent_wave) > 6000 and len(non_silent_wave + non_silent_seg) > 15000:
-                    show_info("Audio is over 15s, clipping short. (1)")
-                    break
-                non_silent_wave += non_silent_seg
-
-            # 2. try to find short silence for clipping if 1. failed
-            if len(non_silent_wave) > 15000:
+            if clip_short:
                 non_silent_segs = silence.split_on_silence(
-                    aseg, min_silence_len=100, silence_thresh=-40, keep_silence=1000, seek_step=10
+                    aseg, min_silence_len=1000, silence_thresh=-50, keep_silence=1000, seek_step=10
                 )
                 non_silent_wave = AudioSegment.silent(duration=0)
                 for non_silent_seg in non_silent_segs:
                     if len(non_silent_wave) > 6000 and len(non_silent_wave + non_silent_seg) > 15000:
-                        show_info("Audio is over 15s, clipping short. (2)")
+                        show_info("Audio is over 15s, clipping short. (1)")
                         break
                     non_silent_wave += non_silent_seg
 
-            aseg = non_silent_wave
+                if len(non_silent_wave) > 15000:
+                    non_silent_segs = silence.split_on_silence(
+                        aseg, min_silence_len=100, silence_thresh=-40, keep_silence=1000, seek_step=10
+                    )
+                    non_silent_wave = AudioSegment.silent(duration=0)
+                    for non_silent_seg in non_silent_segs:
+                        if len(non_silent_wave) > 6000 and len(non_silent_wave + non_silent_seg) > 15000:
+                            show_info("Audio is over 15s, clipping short. (2)")
+                            break
+                        non_silent_wave += non_silent_seg
 
-            # 3. if no proper silence found for clipping
-            if len(aseg) > 15000:
-                aseg = aseg[:15000]
-                show_info("Audio is over 15s, clipping short. (3)")
+                aseg = non_silent_wave
 
-        aseg = remove_silence_edges(aseg) + AudioSegment.silent(duration=50)
-        aseg.export(f.name, format="ogg")
-        ref_audio = f.name
+                if len(aseg) > 15000:
+                    aseg = aseg[:15000]
+                    show_info("Audio is over 15s, clipping short. (3)")
 
-    # Compute a hash of the reference audio file
+            aseg = remove_silence_edges(aseg) + AudioSegment.silent(duration=50)
+            aseg.export(f.name, format="ogg")
+            ref_audio = f.name
+    except Exception:
+        show_info("pydub/ffprobe unavailable, using original reference audio without clipping")
+        ref_audio = ref_audio_orig
+
     with open(ref_audio, "rb") as audio_file:
         audio_data = audio_file.read()
         audio_hash = hashlib.md5(audio_data).hexdigest()
 
     global _ref_audio_cache
     if audio_hash in _ref_audio_cache:
-        # Use cached reference text
         show_info("Using cached reference text...")
         ref_text = _ref_audio_cache[audio_hash]
     else:
@@ -281,10 +270,8 @@ def preprocess_ref_audio_text(ref_audio_orig, ref_text, clip_short=True, show_in
             show_info("Finished transcription")
         else:
             show_info("Using custom reference text...")
-        # Cache the transcribed text
         _ref_audio_cache[audio_hash] = ref_text
 
-    # Ensure ref_text ends with a proper sentence-ending punctuation
     if not ref_text.endswith(". ") and not ref_text.endswith("。"):
         if ref_text.endswith("."):
             ref_text += " "
@@ -292,9 +279,6 @@ def preprocess_ref_audio_text(ref_audio_orig, ref_text, clip_short=True, show_in
             ref_text += ". "
 
     return ref_audio, ref_text
-
-
-# infer process: chunk text -> infer batches [i.e. infer_batch_process()]
 
 
 def infer_process(
@@ -316,7 +300,6 @@ def infer_process(
     device=device,
     lang='es',
 ):
-    # Split the input text into batches
     audio, sr = torchaudio.load(ref_audio)
     return infer_batch_process(
         (audio, sr),
@@ -335,9 +318,6 @@ def infer_process(
         fix_duration=fix_duration,
         device=device,
     )
-
-
-# infer batches
 
 
 def infer_batch_process(
@@ -375,7 +355,6 @@ def infer_batch_process(
     if len(ref_text[-1].encode("utf-8")) == 1:
         ref_text = ref_text + " "
     for i, gen_text in enumerate(progress.tqdm(gen_text_batches)):
-        # Prepare the text
         text_list = [ref_text + gen_text]
         final_text_list = convert_char_to_pinyin(text_list)
 
@@ -383,12 +362,10 @@ def infer_batch_process(
         if fix_duration is not None:
             duration = int(fix_duration * target_sample_rate / hop_length)
         else:
-            # Calculate duration
             ref_text_len = len(ref_text.encode("utf-8"))
             gen_text_len = len(gen_text.encode("utf-8"))
             duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / speed) + int(math.ceil(margin_error_rate * target_sample_rate / hop_length))
 
-        # inference
         with torch.inference_mode():
             generated, _ = model_obj.sample(
                 cond=audio,
@@ -409,15 +386,12 @@ def infer_batch_process(
             if rms < target_rms:
                 generated_wave = generated_wave * rms / target_rms
 
-            # wav -> numpy
             generated_wave = generated_wave.squeeze().cpu().numpy()
 
             generated_waves.append(generated_wave)
             spectrograms.append(generated_mel_spec[0].cpu().numpy())
 
-    # Combine all generated waves with cross-fading
     if cross_fade_duration <= 0:
-        # Simply concatenate
         final_wave = np.concatenate(generated_waves)
     else:
         final_wave = generated_waves[0]
@@ -425,40 +399,30 @@ def infer_batch_process(
             prev_wave = final_wave
             next_wave = generated_waves[i]
 
-            # Calculate cross-fade samples, ensuring it does not exceed wave lengths
             cross_fade_samples = int(cross_fade_duration * target_sample_rate)
             cross_fade_samples = min(cross_fade_samples, len(prev_wave), len(next_wave))
 
             if cross_fade_samples <= 0:
-                # No overlap possible, concatenate
                 final_wave = np.concatenate([prev_wave, next_wave])
                 continue
 
-            # Overlapping parts
             prev_overlap = prev_wave[-cross_fade_samples:]
             next_overlap = next_wave[:cross_fade_samples]
 
-            # Fade out and fade in
             fade_out = np.linspace(1, 0, cross_fade_samples)
             fade_in = np.linspace(0, 1, cross_fade_samples)
 
-            # Cross-faded overlap
             cross_faded_overlap = prev_overlap * fade_out + next_overlap * fade_in
 
-            # Combine
             new_wave = np.concatenate(
                 [prev_wave[:-cross_fade_samples], cross_faded_overlap, next_wave[cross_fade_samples:]]
             )
 
             final_wave = new_wave
 
-    # Create a combined spectrogram
     combined_spectrogram = np.concatenate(spectrograms, axis=1)
 
     return final_wave, target_sample_rate, combined_spectrogram
-
-
-# remove silence from generated wav
 
 
 def remove_silence_for_generated_wav(filename):
@@ -473,12 +437,3 @@ def remove_silence_for_generated_wav(filename):
     aseg.export(filename, format="ogg")
 
 
-# save spectrogram
-
-#
-# def save_spectrogram(spectrogram, path):
-#     plt.figure(figsize=(12, 4))
-#     plt.imshow(spectrogram, origin="lower", aspect="auto")
-#     plt.colorbar()
-#     plt.savefig(path)
-#     plt.close()

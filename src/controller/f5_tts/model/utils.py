@@ -12,12 +12,15 @@ import jieba
 from pypinyin import lazy_pinyin, Style
 
 
-# seed everything
 
 
 def seed_everything(seed=0):
     random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
+    try:
+        bounded_seed = int(seed) % (2**32)
+    except Exception:
+        bounded_seed = 0
+    os.environ["PYTHONHASHSEED"] = str(bounded_seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -25,7 +28,6 @@ def seed_everything(seed=0):
     torch.backends.cudnn.benchmark = False
 
 
-# helpers
 
 
 def exists(v):
@@ -36,7 +38,6 @@ def default(v, d):
     return v if exists(v) else d
 
 
-# tensor helpers
 
 
 def lens_to_mask(t: int["b"], length: int | None = None) -> bool["b n"]:  # noqa: F722 F821
@@ -77,14 +78,12 @@ def maybe_masked_mean(t: float["b n d"], mask: bool["b n"] = None) -> float["b d
     return num / den.clamp(min=1.0)
 
 
-# simple utf-8 tokenizer, since paper went character based
 def list_str_to_tensor(text: list[str], padding_value=-1) -> int["b nt"]:  # noqa: F722
     list_tensors = [torch.tensor([*bytes(t, "UTF-8")]) for t in text]  # ByT5 style
     text = pad_sequence(list_tensors, padding_value=padding_value, batch_first=True)
     return text
 
 
-# char tokenizer, based on custom dataset's extracted .txt file
 def list_str_to_idx(
     text: list[str] | list[list[str]],
     vocab_char_map: dict[str, int],  # {char: idx}
@@ -95,18 +94,10 @@ def list_str_to_idx(
     return text
 
 
-# Get tokenizer
 
 
 def get_tokenizer(dataset_name, tokenizer: str = "pinyin"):
     """
-    tokenizer   - "pinyin" do g2p for only chinese characters, need .txt vocab_file
-                - "char" for char-wise tokenizer, need .txt vocab_file
-                - "byte" for utf-8 tokenizer
-                - "custom" if you're directly passing in a path to the vocab_es.txt you want to use
-    vocab_size  - if use "pinyin", all available pinyin types, common alphabets (also those with accent) and symbols
-                - if use "char", derived from unfiltered character & symbol counts of custom dataset
-                - if use "byte", set to 256 (unicode byte range)
     """
     if tokenizer in ["pinyin", "char"]:
         tokenizer_path = os.path.join(files("f5_tts").joinpath("../../data"), f"{dataset_name}_{tokenizer}/vocab_es.txt")
@@ -131,15 +122,14 @@ def get_tokenizer(dataset_name, tokenizer: str = "pinyin"):
     return vocab_char_map, vocab_size
 
 
-# convert char to pinyin
 
 
 def convert_char_to_pinyin(text_list, polyphone=True):
     final_text_list = []
     god_knows_why_en_testset_contains_zh_quote = str.maketrans(
         {"“": '"', "”": '"', "‘": "'", "’": "'"}
-    )  # in case librispeech (orig no-pc) test-clean
-    custom_trans = str.maketrans({";": ","})  # add custom trans here, to address oov
+    )
+    custom_trans = str.maketrans({";": ","})
     for text in text_list:
         char_list = []
         text = text.translate(god_knows_why_en_testset_contains_zh_quote)
@@ -171,7 +161,6 @@ def convert_char_to_pinyin(text_list, polyphone=True):
     return final_text_list
 
 
-# filter func for dirty data with many repetitions
 
 
 def repetition_found(text, length=2, tolerance=10):
