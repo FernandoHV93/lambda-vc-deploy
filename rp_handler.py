@@ -3,12 +3,14 @@ import os
 import runpod
 
 from typing import Dict, Any
+
+from examples.run_local import compute_hash
 from src.service.APIService import process_clone_job_sync
 from src.utils.S3Service import download_file_bucket, list_files, upload_file
 from src.config.config import Configurations
 import requests
 from src.utils.TelegramOperations import sendTelegramMessage
-
+from  src.utils.Base64 import base64_decode, base64_encode, compute_hash
 
 
 def is_single_model_checkpoint_downloaded( localModelPath, fyself_s3_models, huggingfaceUri):
@@ -79,36 +81,55 @@ def is_model_checkpoint_downloaded(model_name: list):
 def handler(event: Dict[str, Any]) -> Dict[str, Any]:
     input_data = event.get("input", {})
     out = {}
-    out["job_id"] = input_data.get("job_id")
     guide_text = input_data.get("guide_text")
     language = input_data.get("language")
     text_to_speech = input_data.get("text_to_speech")
     reference_audio = input_data.get("reference_audio")
-    return_strategy = input_data.get("return_strategy", "base64")
+    checksum = input_data.get("checksum")
 
     if not isinstance(guide_text, str) or not guide_text:
         return {
-            "job_id": out.get("job_id"),
-            "status": "Error",
+            "status": 400,
             "message": "guide_text is required"
         }
     if not isinstance(language, str) or not language:
         return {
-            "job_id": out.get("job_id"),
-            "status": "Error",
+            "status": 400,
             "message": "language is required"
         }
-    if not isinstance(text_to_speech, str) or not text_to_speech:
+    if not text_to_speech or not isinstance(text_to_speech, list) or not all(isinstance(x, str) for x in text_to_speech):
         return {
-            "job_id": out.get("job_id"),
-            "status": "Error",
+            "status": 400,
             "message": "text_to_speech is required"
         }
     if not isinstance(reference_audio, str) or not reference_audio:
         return {
-            "job_id": out.get("job_id"),
-            "status": "Error",
-            "message": "reference_audio is required (base64 or URL)"
+            "status": 400,
+            "message": "reference_audio is required (base64)"
+        }
+    if not checksum or not isinstance(checksum, str):
+        return {
+            "status": 400,
+            "message": "checksum is required"
+        }
+
+    # Decode Base64
+    try:
+        audio_bytes = base64_decode(reference_audio)
+    except Exception:
+        return {
+            "status": 400,
+            "message": "The base64 encoded audio is corrupted"
+        }
+
+    # Compute checksum
+    checksum_received = compute_hash(audio_bytes)
+
+    # Compare
+    if checksum_received != checksum:
+        return {
+            "status": 400,
+            "message": "The audio is corrupted or has been altered."
         }
 
     result = process_clone_job_sync(
@@ -116,23 +137,17 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
         language=language,
         reference_audio=reference_audio,
         text_to_speech=text_to_speech,
-        return_strategy=return_strategy,
     )
 
+    if result.get('status', None):
+        return result
+
     out_payload = {
-        "job_id": out.get("job_id"),
-        "status": "completed",
-        "result_format": result.get('format', 'wav'),
-        "sample_rate": result.get('sample_rate'),
-        "seed": result.get('seed'),
+        "status": 200,
+        "message": "OK",
+        "result": result.get('audios_base64')
     }
-    if return_strategy == 's3':
-        out_payload.update({
-            "s3_url_presigned": result.get('s3_url_presigned'),
-            "s3_key": result.get('s3_key'),
-        })
-    else:
-        out_payload["result_audio_base64"] = result.get('audio_base64')
+
     return out_payload
 
 

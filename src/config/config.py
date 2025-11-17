@@ -43,6 +43,7 @@ class Configurations:
     FYSELF_S3_MODELS = getenv(PREFIX + "FYSELF_S3_MODELS", "fyself-ia-models")
     MSNLP_BUCKET_NAME = getenv("MSNLP_BUCKET_NAME", 'nlp-glove-data')
     LAMBDA_VC_OUTPUT_PREFIX = getenv(PREFIX + 'OUTPUT_PREFIX', 'voice-clones')
+    BATCH_SIZE = getenv(PREFIX + 'BATCH_SIZE', 10)
 
     @staticmethod
     def isProd():

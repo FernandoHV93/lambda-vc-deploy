@@ -1,8 +1,8 @@
 {
   "input": {
-    "guide_text": "Hola, este es un texto de guía para la clonación de voz.",
+    "guide_text": "Lea detenidamente, con voz clara el siguiente texto: Confirmo que esta grabación de voz es mía o que tengo todos los derechos necesarios para enviarla. Al continuar, declaro que he leído y aceptado los Términos de Uso de FySelf y de la aplicación TwinH para este envío.",
     "language": "es",
-    "text_to_speech": "Hola, esta es una prueba de síntesis de voz clonada.",
-    "referece_audio": "users/1234/reference/ref.wav"
+    "text_to_speech": ["Hola, esta es una prueba de síntesis de voz clonada."],
+    "reference_audio": "fyself_audio_users/84848484/ref_audio.ogg"
   }
 }

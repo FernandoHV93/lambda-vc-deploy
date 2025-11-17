@@ -7,51 +7,35 @@ from src.utils.TelegramOperations import sendTelegramMessage
 from src.config.config import Configurations
 from src.utils.S3Service import download_file, upload_file, generate_presigned_url
 from src.controller.f5_tts.AudioModel import F5TTS
+from src.utils.Base64 import base64_decode, base64_encode
 
 class TextToVoice:
 
     @staticmethod
     def _save_reference_audio_local(reference_audio: str) -> str:
         try:
-            os.makedirs('/tmp', exist_ok=True)
+            os.makedirs('audio', exist_ok=True)
             if reference_audio.startswith('data:') and ';base64,' in reference_audio:
                 header, b64data = reference_audio.split(';base64,', 1)
                 ext = '.wav'
                 if 'audio/' in header:
                     ext = '.' + header.split('audio/')[1]
-                path = os.path.join('/tmp', 'ref_audio' + ext)
+                path = os.path.join('audio', 'ref_audio' + ext)
                 with open(path, 'wb') as f:
-                    f.write(base64.b64decode(b64data))
+                    f.write(base64_decode(b64data))
                 return path
 
-            try:
-                decoded = base64.b64decode(reference_audio, validate=True)
-                path = os.path.join('/tmp', 'ref_audio')
-                with open(path, 'wb') as f:
-                    f.write(decoded)
-                return path
-            except Exception:
-                pass
 
-            parsed = urlparse(reference_audio)
-            if parsed.scheme in ('http', 'https'):
-                ext = os.path.splitext(parsed.path)[1] or '.wav'
-                path = os.path.join('/tmp', 'ref_audio' + ext)
-                r = requests.get(reference_audio, timeout=30)
-                r.raise_for_status()
-                with open(path, 'wb') as f:
-                    f.write(r.content)
-                return path
-
-            filename = os.path.join('/tmp', os.path.basename(reference_audio))
-            if not os.path.exists(filename):
-                download_file(reference_audio, filename)
-            return filename
+            decoded = base64_decode(reference_audio, validate=True)
+            path = os.path.join('audio', 'ref_audio.wav')
+            with open(path, 'wb') as f:
+                f.write(decoded)
+            return path
         except Exception as e:
             raise Exception('Failed to load reference_audio: ' + str(e))
 
     @staticmethod
-    def text_to_voice_cloning_converter(text_in: str, lang: str, reference_audio: str, ref_text: str = None, return_strategy: str = 'base64'):
+    def text_to_voice_cloning_converter(text_in: list, lang: str, reference_audio: str, ref_text: str = None):
         try:
             audio_ref = TextToVoice._save_reference_audio_local(reference_audio)
             ckpt_file = ''
@@ -66,39 +50,32 @@ class TextToVoice:
             model = F5TTS(ckpt_file=ckpt_file)
 
             _, ext = os.path.splitext(audio_ref)
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_out:
-                file_save = tmp_out.name
 
-            wav, sr, spect = model.infer(
-                ref_file=audio_ref,
-                ref_text=ref_text or '',
-                gen_text=text_in,
-                file_wave=file_save,
-                speed=0.95,
-                remove_silence=False,
-                lang=preproc_lang,
-            )
-            seed = model.seed
-            if return_strategy == 's3':
-                object_name = os.path.join(Configurations.LAMBDA_VC_OUTPUT_PREFIX, os.path.basename(file_save))
-                upload_file(file_save, object_name=object_name)
-                url = generate_presigned_url(object_name)
-                return {
-                    's3_url_presigned': url,
-                    's3_key': object_name,
-                    'format': 'wav',
-                    'sample_rate': sr,
-                    'seed': seed
-                }
-            else:
+            texts_in = [text_in[i:i + Configurations.BATCH_SIZE] for i in range(0, len(text_in), Configurations.BATCH_SIZE)]
+            waves = []
+            for text in texts_in:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_out:
+                    file_save = tmp_out.name
+
+                wav, sr, spect = model.infer(
+                    ref_file=audio_ref,
+                    ref_text=ref_text or '',
+                    gen_text=text,
+                    file_wave=file_save,
+                    speed=0.8,
+                    remove_silence=False,
+                    lang=preproc_lang,
+                )
+
                 with open(file_save, 'rb') as f:
-                    wav_b64 = base64.b64encode(f.read()).decode('utf-8')
-                return {
-                    'audio_base64': wav_b64,
-                    'format': 'wav',
-                    'sample_rate': sr,
-                    'seed': seed
-                }
+                    wav_b64 = base64_encode(f.read()).decode('utf-8')
+                waves.append(wav_b64)
+            return {
+                'audios_base64': waves,
+            }
         except Exception as e:
             sendTelegramMessage('📌🤮Exception at voice cloning ia method, raise error'+str(e))
-            raise
+            return {
+                "status": 500,
+                "message": 'Error: ' + str(e)
+            }
