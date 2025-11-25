@@ -19,3 +19,4 @@ vocos>=0.1.0
 pytest>=7.0.0
 scipy>=1.10.0
 matplotlib>=3.7.0
+torchdiffeq
