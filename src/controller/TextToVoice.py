@@ -1,11 +1,7 @@
 import os.path
-import base64
 import tempfile
-from urllib.parse import urlparse
-import requests
 from src.utils.TelegramOperations import sendTelegramMessage
 from src.config.config import Configurations
-from src.utils.S3Service import download_file, upload_file, generate_presigned_url
 from src.controller.f5_tts.AudioModel import F5TTS
 from src.utils.Base64 import base64_decode, base64_encode
 
@@ -74,7 +70,7 @@ class TextToVoice:
                 'audios_base64': waves,
             }
         except Exception as e:
-            sendTelegramMessage('📌🤮Exception at voice cloning ia method, raise error'+str(e))
+            sendTelegramMessage('📌🤮Exception at voice cloning ia method, raise error '+str(e))
             return {
                 "status": 500,
                 "message": 'Error: ' + str(e)

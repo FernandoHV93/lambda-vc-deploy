@@ -8,13 +8,11 @@ from src.utils.LogsPrint import printLog
 
 def sendTelegramMessage(*parameters):
     printLog(*parameters)
-    if not (Configurations.isProd() or Configurations.isStaging()):
-        return
     try:
         if not parameters:
             return
 
-        text = "TelegramBot " + (Configurations.BASE_URL or "") + "\n"
+        text = "NOTIFICATION --> LAMBDA-VC\n"
 
         for p in parameters:
             if not isinstance(p, str):
@@ -55,7 +53,7 @@ def sendTelegramMessageText(chat_id: int, text: str, reply_to_message_id=None, d
         }
 
     response = requests.post("https://api.telegram.org/bot{}/sendMessage"
-                             .format(getenv("TELEGRAM_BOT_TOKEN", "")), payload)
+                             .format(Configurations.TELEGRAM_BOT_TOKEN), payload)
 
     message_id = None
     if response.ok:
@@ -79,7 +77,7 @@ def sendTelegramMessageFile(chat_id: int, text: str, fileContent: str, reply_to_
         "chat_id": chat_id
     }
     response = requests.post("https://api.telegram.org/bot{}/sendDocument"
-                             .format(getenv("TELEGRAM_BOT_TOKEN", "")),
+                             .format(Configurations.TELEGRAM_BOT_TOKEN),
                              params=payload, files={"document": ("context.txt", fileContent.encode())})
     message_id = None
     if response.ok:
@@ -119,7 +117,7 @@ def sendStructuredTelegramMessage(chat_id: int, title: str, fields: dict, footer
     }
 
     response = requests.post(
-        "https://api.telegram.org/bot{}/sendMessage".format(getenv("TELEGRAM_BOT_TOKEN", "")),
+        "https://api.telegram.org/bot{}/sendMessage".format(Configurations.TELEGRAM_BOT_TOKEN),
         data=payload
     )
 
