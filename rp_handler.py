@@ -4,7 +4,6 @@ import runpod
 
 from typing import Dict, Any
 
-from examples.run_local import compute_hash
 from src.service.APIService import process_clone_job_sync
 from src.utils.S3Service import download_file_bucket, list_files, upload_file
 from src.config.config import Configurations

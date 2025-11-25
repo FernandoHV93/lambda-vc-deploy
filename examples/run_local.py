@@ -3,6 +3,7 @@ import base64
 import os
 from pathlib import Path
 import  hashlib
+from src.utils.Base64 import compute_hash
 
 import sys
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -15,9 +16,6 @@ def file_to_base64(path: str):
         audio_bytes = f.read()
         audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
     return audio_b64, audio_bytes
-
-def compute_hash(data_bytes):
-    return hashlib.sha256(data_bytes).hexdigest()
 
 def main():
     ref_file = os.environ.get('REF_AUDIO', '')
