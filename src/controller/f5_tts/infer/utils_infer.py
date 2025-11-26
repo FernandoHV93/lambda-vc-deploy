@@ -337,6 +337,7 @@ def infer_batch_process(
     fix_duration=None,
     device=None,
 ):
+    print('Ready for inference...')
     audio, sr = ref_audio
     if audio.shape[0] > 1:
         audio = torch.mean(audio, dim=0, keepdim=True)
