@@ -27,8 +27,6 @@ def is_single_model_checkpoint_downloaded( localModelPath, huggingfaceUri):
                             f"No se ha podido descargar el modelo {model_name}")
         raise Exception(f"No se ha podido descargar el modelo {model_name}")
 
-    sendTelegramMessage(f"is_single_model_checkpoint_downloaded\nDescargado desde huggingfaceUri {model_name}")
-
     with open(localModelPath, 'wb') as f:
         f.write(response.content)
 
@@ -50,7 +48,6 @@ def is_model_checkpoint_downloaded(model_name: list):
 
 def handler(event: Dict[str, Any]) -> Dict[str, Any]:
     input_data = event.get("input", {})
-    out = {}
     guide_text = input_data.get("guide_text")
     language = input_data.get("language")
     text_to_speech = input_data.get("text_to_speech")
