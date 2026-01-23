@@ -1,5 +1,6 @@
 import os.path
 import tempfile
+from src.controller.chatterbox_tts.ChatterboxManager import ChatterboxTTS
 from src.utils.TelegramOperations import sendTelegramMessage
 from src.config.config import Configurations
 from src.controller.f5_tts.AudioModel import F5TTS
@@ -31,7 +32,38 @@ class TextToVoice:
             raise Exception('Failed to load reference_audio: ' + str(e))
 
     @staticmethod
-    def text_to_voice_cloning_converter(text_in: list, lang: str, reference_audio: str, ref_text: str = None):
+    def text_to_voice_cloning_converter(text_in: list, reference_audio: str, lang: str = 'es', ref_text: str = None):
+        try:
+            audio_ref = TextToVoice._save_reference_audio_local(reference_audio)
+
+            waves = []
+            for text in text_in:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_out:
+                    file_save = tmp_out.name
+                ChatterboxTTS.generate_multilingual_audio(
+                    text_in=text,
+                    reference_audio=audio_ref,
+                    result_audio_path=file_save,
+                    lang=lang
+                )
+
+                with open(file_save, 'rb') as f:
+                    wav_b64 = base64_encode(f.read()).decode('utf-8')
+                waves.append(wav_b64)
+
+            return {
+                'audios_base64': waves,
+            }
+        except Exception as e:
+            sendTelegramMessage('📌🤮Exception at voice cloning ia method, raise error ' + str(e))
+            return {
+                "status": 500,
+                "message": 'Error: ' + str(e)
+            }
+
+
+    @staticmethod
+    def text_to_voice_cloning_converter_f5_tts(text_in: list, lang: str, reference_audio: str, ref_text: str = None):
         try:
             audio_ref = TextToVoice._save_reference_audio_local(reference_audio)
             ckpt_file = ''
