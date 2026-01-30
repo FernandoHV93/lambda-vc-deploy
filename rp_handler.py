@@ -32,8 +32,6 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
             "status": 400,
             "message": "checksum is required"
         }
-
-    # Decode Base64
     try:
         audio_bytes = base64_decode(reference_audio)
     except Exception:
@@ -42,7 +40,6 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
             "message": "The base64 encoded audio is corrupted"
         }
 
-    # Compute checksum
     checksum_received = compute_hash(audio_bytes)
 
     # Compare

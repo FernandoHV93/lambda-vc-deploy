@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from src.utils.Base64 import compute_hash
 from rp_handler import handler
 
 
@@ -37,22 +38,27 @@ def compute_basic_metrics(wave: np.ndarray):
 
 def test_handler_accepts_base64_and_returns_audio(tmp_path):
     ref = sine_wave(0.2)
-    ref_b64 = 'data:audio/wav;base64,' + wav_base64_from_numpy(ref)
+    ref_b64 = wav_base64_from_numpy(ref)
+    audio_bytes = base64.b64decode(ref_b64)
+    checksum = compute_hash(audio_bytes)
 
     payload = {
         "input": {
-            "job_id": "pytest-1",
             "guide_text": "Referencia corta.",
             "language": "es",
-            "text_to_speech": "Hola, prueba de clonación.",
-            "reference_audio": ref_b64
+            "text_to_speech": ["Hola, prueba de clonación."],
+            "reference_audio": ref_b64,
+            "checksum": checksum,
         }
     }
     res = handler(payload)
-    assert res["status"] in ("completed", "Error")  # allow running without models in CI
-    if res["status"] == "completed":
-        b64 = res["result_audio_base64"]
-        assert isinstance(b64, str) and len(b64) > 0
+    if res.get("status") == 200:
+        assert "result" in res
+        assert isinstance(res["result"], list) and len(res["result"]) > 0
+        assert isinstance(res["result"][0], str) and len(res["result"][0]) > 0
+    else:
+        assert res.get("status") in (400, 500)
+        assert "message" in res
 
 
 def test_metrics_plot(tmp_path):
