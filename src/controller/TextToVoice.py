@@ -1,6 +1,6 @@
 import os.path
 import tempfile
-from src.controller.chatterbox_tts.ChatterboxManager import ChatterboxTTS
+from src.controller.voxcpm_tts.VoxCPMManager import VoxCPMTTS
 from src.utils.TelegramOperations import sendTelegramMessage
 from src.utils.Base64 import base64_decode, base64_encode
 
@@ -38,11 +38,11 @@ class TextToVoice:
             for text in text_in:
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_out:
                     file_save = tmp_out.name
-                ChatterboxTTS.generate_multilingual_audio(
+                VoxCPMTTS.generate_audio(
                     text_in=text,
                     reference_audio=audio_ref,
                     result_audio_path=file_save,
-                    lang=lang
+                    ref_text=ref_text,
                 )
 
                 with open(file_save, 'rb') as f:

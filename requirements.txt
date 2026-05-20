@@ -1,8 +1,8 @@
-# Chatterbox (modelo único) — alineado con chatterbox-tts 0.1.6
+# VoxCPM2 (modelo único) — 2B params, 48kHz, 30 idiomas
 torch==2.6.0
 torchaudio==2.6.0
 numpy>=1.24.0,<1.26
-chatterbox-tts==0.1.6
+voxcpm
 
 # RunPod / S3 / backend
 runpod>=0.10.0
