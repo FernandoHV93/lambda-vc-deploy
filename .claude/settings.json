@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /Users/paynet-dev/IdeaProjects/lambda-vc-deploy/src/controller/voxcpm_tts)",
+      "Bash(touch /Users/paynet-dev/IdeaProjects/lambda-vc-deploy/src/controller/voxcpm_tts/__init__.py)",
+      "Bash(git -C /Users/paynet-dev/IdeaProjects/lambda-vc-deploy remote -v)"
+    ]
+  }
+}

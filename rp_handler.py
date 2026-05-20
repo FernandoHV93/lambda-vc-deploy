@@ -2,7 +2,8 @@ import runpod
 from typing import Dict, Any
 from src.service.APIService import process_clone_job_sync
 from  src.utils.Base64 import base64_decode, compute_hash
-
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 
 def handler(event: Dict[str, Any]) -> Dict[str, Any]:
     input_data = event.get("input", {})
