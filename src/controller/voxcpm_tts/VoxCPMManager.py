@@ -1,4 +1,9 @@
+import os
 import soundfile as sf
+
+# Disable torch dynamo/inductor compilation — no C compiler in Lambda environment
+os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+
 from voxcpm import VoxCPM
 
 
