@@ -1,9 +1,23 @@
+import os
+# Must be set before ANY torch import so inductor never attempts C compilation
+os.environ["TORCHDYNAMO_DISABLE"] = "1"
+
+import torch
+
+# True no-op: intercepts every torch.compile() call inside voxcpm (or any dep)
+# before inductor ever looks for a C compiler.
+# TORCHDYNAMO_DISABLE alone is insufficient because inductor raises the
+# RuntimeError before dynamo's own error-suppression machinery can catch it.
+def _noop_compile(fn=None, *_, **__):
+    # Handles: torch.compile(fn), @torch.compile, @torch.compile()
+    return fn if fn is not None else (lambda f: f)
+
+torch.compile = _noop_compile
+
 import runpod
 from typing import Dict, Any
 from src.service.APIService import process_clone_job_sync
 from  src.utils.Base64 import base64_decode, compute_hash
-import torch._dynamo
-torch._dynamo.config.suppress_errors = True
 
 def handler(event: Dict[str, Any]) -> Dict[str, Any]:
     input_data = event.get("input", {})
