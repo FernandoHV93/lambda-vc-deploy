@@ -4,8 +4,6 @@ import soundfile as sf
 # Disable torch dynamo/inductor compilation — no C compiler in Lambda environment
 os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 
-from voxcpm import VoxCPM
-
 
 class VoxCPMTTS:
 
@@ -16,7 +14,12 @@ class VoxCPMTTS:
         result_audio_path: str,
         ref_text: str = None,
     ):
-        model = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False)
+        # Imported lazily: importing voxcpm (gradio, funasr, modelscope, ...) at worker
+        # startup makes the Runpod worker die when it receives its first job.
+        # Any import error now surfaces as a 500 in the job response instead.
+        from voxcpm import VoxCPM
+
+        model =VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False)
 
         if ref_text:
             # Ultimate cloning: highest fidelity using reference audio + transcript
