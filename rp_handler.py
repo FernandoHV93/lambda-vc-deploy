@@ -21,6 +21,11 @@ from  src.utils.Base64 import base64_decode, compute_hash
 
 def handler(event: Dict[str, Any]) -> Dict[str, Any]:
     input_data = event.get("input", {})
+
+    # Diagnostics probe: {"input": {"diagnostics": true}} -> GPU/torch info, no model load.
+    if input_data.get("diagnostics"):
+        from src.controller.TextToVoice import TextToVoice
+        return {"status": 200, "message": "OK", "gpu": TextToVoice._gpu_info()}
     guide_text = input_data.get("guide_text", "")
     language = input_data.get("language")
     text_to_speech = input_data.get("text_to_speech")

@@ -1,5 +1,6 @@
 import os.path
 import tempfile
+import traceback
 from src.controller.voxcpm_tts.VoxCPMManager import VoxCPMTTS
 from src.utils.TelegramOperations import sendTelegramMessage
 from src.utils.Base64 import base64_decode, base64_encode
@@ -30,6 +31,20 @@ class TextToVoice:
             raise Exception('Failed to load reference_audio: ' + str(e))
 
     @staticmethod
+    def _gpu_info():
+        try:
+            import torch
+            info = {"torch": torch.__version__, "torch_cuda": torch.version.cuda,
+                    "cuda_available": torch.cuda.is_available()}
+            if torch.cuda.is_available():
+                info["gpu"] = torch.cuda.get_device_name(0)
+                info["capability"] = list(torch.cuda.get_device_capability(0))
+                info["arch_list"] = torch.cuda.get_arch_list()
+            return info
+        except Exception as e:
+            return {"gpu_info_error": str(e)}
+
+    @staticmethod
     def text_to_voice_cloning_converter(text_in: list, reference_audio: str, lang: str = 'es', ref_text: str = None):
         try:
             audio_ref = TextToVoice._save_reference_audio_local(reference_audio)
@@ -56,5 +71,7 @@ class TextToVoice:
             sendTelegramMessage('📌🤮Exception at voice cloning ia method, raise error ' + str(e))
             return {
                 "status": 500,
-                "message": 'Error: ' + str(e)
+                "message": 'Error: ' + str(e),
+                "traceback": traceback.format_exc(),
+                "gpu": TextToVoice._gpu_info()
             }
