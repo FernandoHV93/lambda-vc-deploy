@@ -1,6 +1,9 @@
 # VoxCPM2 (modelo único) — 2B params, 48kHz, 30 idiomas
-torch==2.6.0
-torchaudio==2.6.0
+# torch cu128: incluye kernels sm_120 (Blackwell). Runpod mezcla slices Blackwell (RTX PRO 6000 MIG)
+# en el pool de 24GB; con torch 2.6+cu124 falla con "no kernel image is available".
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.7.1+cu128
+torchaudio==2.7.1+cu128
 numpy>=1.24.0,<1.26
 voxcpm
 
